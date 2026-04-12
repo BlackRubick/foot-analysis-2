@@ -154,7 +154,7 @@ type FootOverlay = {
   right: FootSection | null;
 } | null;
 
-export const AnalisisBiomecanico: React.FC = () => {
+const AnalisisBiomecanico: React.FC = () => {
   const navigate = useNavigate();
   const capturedImages = useAppStore((s) => s.capturedImages);
   const currentStudyUID = useAppStore((s) => s.currentStudyUID);
@@ -407,7 +407,8 @@ const analyzeFootprintAutomatically = async () => {
   // Si quieres mostrar el tipo de pie, usa footTypeInfo
   // Si necesitas overlay visual, deberías construirlo por pie (left/right)
   setFootOverlay(null); // O ajusta para overlay visual por pie si lo necesitas
-};
+  };
+
   const analyzeHeelAlignmentAutomatically = async () => {
     if (!imageRef.current) return;
 
@@ -774,3 +775,5 @@ const analyzeFootprintAutomatically = async () => {
     </div>
   );
 };
+
+export default AnalisisBiomecanico;
