@@ -400,13 +400,50 @@ const analyzeFootprintAutomatically = async () => {
 
   setFootTypeInfo(text);
 
-  // ⚠️ mantenemos overlay simple (no rompemos UI)
-  const r = results[0];
-
-  // El overlay plantar ahora solo contiene left/right, no category global
-  // Si quieres mostrar el tipo de pie, usa footTypeInfo
-  // Si necesitas overlay visual, deberías construirlo por pie (left/right)
-  setFootOverlay(null); // O ajusta para overlay visual por pie si lo necesitas
+  // Construir overlay visual para cada pie (left/right)
+  const overlay: FootOverlay = { left: null, right: null };
+  results.forEach((r, idx) => {
+    // Eje longitudinal: de talón (retropié) a antepié (dedo 2)
+    const heel = { x: (r.rear.left + r.rear.right) / 2, y: r.rear.y };
+    const toe2 = { x: (r.fore.left + r.fore.right) / 2, y: r.fore.y };
+    const axis = {
+      x1: heel.x,
+      y1: heel.y,
+      x2: toe2.x,
+      y2: toe2.y,
+    };
+    const footLength = Math.hypot(axis.x2 - axis.x1, axis.y2 - axis.y1);
+    // Secciones: fore, mid, rear
+    const sections = [
+      {
+        name: 'Antepié',
+        px: (r.fore.left + r.fore.right) / 2,
+        py: r.fore.y,
+        width: r.fore.width,
+        left: { x: r.fore.left, y: r.fore.y },
+        right: { x: r.fore.right, y: r.fore.y },
+      },
+      {
+        name: 'Mediopié',
+        px: (r.mid.left + r.mid.right) / 2,
+        py: r.mid.y,
+        width: r.mid.width,
+        left: { x: r.mid.left, y: r.mid.y },
+        right: { x: r.mid.right, y: r.mid.y },
+      },
+      {
+        name: 'Retropié',
+        px: (r.rear.left + r.rear.right) / 2,
+        py: r.rear.y,
+        width: r.rear.width,
+        left: { x: r.rear.left, y: r.rear.y },
+        right: { x: r.rear.right, y: r.rear.y },
+      },
+    ];
+    const side = idx === 0 ? 'left' : 'right';
+    overlay[side] = { heel, toe2, axis, footLength, sections, side };
+  });
+  setFootOverlay(overlay);
   };
 
   const analyzeHeelAlignmentAutomatically = async () => {
