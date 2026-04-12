@@ -146,8 +146,35 @@ type FootSection = {
     width: number;
     left: { x: number; y: number };
     right: { x: number; y: number };
+    color?: string;
   }>;
   side: 'left' | 'right';
+  bands: Array<{
+    label: string;
+    color: string;
+    px: number;
+    py: number;
+    left: number;
+    right: number;
+    widthPx: number;
+    widthCm: number;
+  }>;
+  bandM: {
+    left: number;
+    right: number;
+    py: number;
+  };
+  bandL3: {
+    left: number;
+    right: number;
+    py: number;
+  };
+  bandL: {
+    label: string;
+    color: string;
+    px: number;
+    py: number;
+  };
 };
 type FootOverlay = {
   left: FootSection | null;
@@ -400,7 +427,19 @@ const analyzeFootprintAutomatically = async () => {
 
   setFootTypeInfo(text);
 
-  // Construir overlay visual para cada pie (left/right)
+  // --- Conversión de píxeles a centímetros ---
+  // Puedes ajustar este valor según la resolución real de tu escáner o podoscopio
+  const PX_PER_CM = 37.8; // 1 cm ≈ 37.8 px (ajusta según tu dispositivo)
+
+  // Definir las bandas horizontales (A, M, L3, L4, P) como proporciones del alto del pie
+  const bandLabels = [
+    { key: 'A', color: '#e11d48', pos: 0.08 },   // Anterior
+    { key: 'M', color: '#fbbf24', pos: 0.22 },   // Metatarso
+    { key: 'L3', color: '#a21caf', pos: 0.40 },  // Línea 3
+    { key: 'L4', color: '#92400e', pos: 0.60 },  // Línea 4
+    { key: 'P', color: '#ea580c', pos: 0.90 },   // Posterior
+  ];
+
   const overlay: FootOverlay = { left: null, right: null };
   results.forEach((r, idx) => {
     // Eje longitudinal: de talón (retropié) a antepié (dedo 2)
@@ -413,35 +452,70 @@ const analyzeFootprintAutomatically = async () => {
       y2: toe2.y,
     };
     const footLength = Math.hypot(axis.x2 - axis.x1, axis.y2 - axis.y1);
-    // Secciones: fore, mid, rear
-    const sections = [
-      {
-        name: 'Antepié',
-        px: (r.fore.left + r.fore.right) / 2,
-        py: r.fore.y,
-        width: r.fore.width,
-        left: { x: r.fore.left, y: r.fore.y },
-        right: { x: r.fore.right, y: r.fore.y },
-      },
-      {
-        name: 'Mediopié',
-        px: (r.mid.left + r.mid.right) / 2,
-        py: r.mid.y,
-        width: r.mid.width,
-        left: { x: r.mid.left, y: r.mid.y },
-        right: { x: r.mid.right, y: r.mid.y },
-      },
-      {
-        name: 'Retropié',
-        px: (r.rear.left + r.rear.right) / 2,
-        py: r.rear.y,
-        width: r.rear.width,
-        left: { x: r.rear.left, y: r.rear.y },
-        right: { x: r.rear.right, y: r.rear.y },
-      },
-    ];
+
+    // Calcular las posiciones de las bandas horizontales (A, M, L3, L4, P)
+    const bands = bandLabels.map((b) => {
+      // Interpolar sobre el eje del pie
+      const t = b.pos;
+      const px = axis.x1 + (axis.x2 - axis.x1) * t;
+      const py = axis.y1 + (axis.y2 - axis.y1) * t;
+      // Buscar extremos izquierdo y derecho en esa banda
+      let left = r.xEnd, right = r.xStart;
+      for (let x = r.xStart; x <= r.xEnd; x++) {
+        const y = Math.round(py);
+        if (isFootPixel[y * width + x]) {
+          if (x < left) left = x;
+          if (x > right) right = x;
+        }
+      }
+      const widthPx = right >= left ? right - left : 0;
+      const widthCm = widthPx / PX_PER_CM;
+      return {
+        label: b.key,
+        color: b.color,
+        px,
+        py,
+        left,
+        right,
+        widthPx,
+        widthCm,
+      };
+    });
+
+    // Etiquetas adicionales (X, Y, L) para los valores destacados
+    // X: banda M, Y: banda L3, L: eje vertical
+    const bandM = bands[1];
+    const bandL3 = bands[2];
+    const bandL = {
+      label: 'L',
+      color: '#22c55e',
+      px: axis.x1,
+      py: axis.y1,
+    };
+
+    const sections = bands.map((b) => ({
+      name: b.label,
+      px: (b.left + b.right) / 2,
+      py: b.py,
+      width: b.widthCm,
+      left: { x: b.left, y: b.py },
+      right: { x: b.right, y: b.py },
+      color: b.color,
+    }));
+
     const side = idx === 0 ? 'left' : 'right';
-    overlay[side] = { heel, toe2, axis, footLength, sections, side };
+    overlay[side] = {
+      heel,
+      toe2,
+      axis,
+      footLength,
+      sections,
+      side,
+      bands,
+      bandM,
+      bandL3,
+      bandL,
+    };
   });
   setFootOverlay(overlay);
   };
@@ -653,75 +727,133 @@ const analyzeFootprintAutomatically = async () => {
                         {(['left', 'right'] as const).map((side) => {
                           const foot = footOverlay[side];
                           if (!foot) return null;
-                          // Escala de píxeles a porcentaje
                           const scaleX = 100 / (imageRef.current?.naturalWidth || 1);
                           const scaleY = 100 / (imageRef.current?.naturalHeight || 1);
                           return (
                             <g key={side}>
-                              {/* Eje longitudinal */}
+                              {/* Eje longitudinal (L) */}
                               <line
                                 x1={foot.axis.x1 * scaleX + '%'}
                                 y1={foot.axis.y1 * scaleY + '%'}
                                 x2={foot.axis.x2 * scaleX + '%'}
                                 y2={foot.axis.y2 * scaleY + '%'}
-                                stroke="#16a34a"
+                                stroke="#22c55e"
                                 strokeWidth={2}
                               />
-                              {/* Secciones y medidas */}
-                              {foot.sections.map((sec: typeof foot.sections[number], i: number) => (
-                                <g key={sec.name}>
-                                  {/* Línea de sección */}
+                              {/* Etiqueta L */}
+                              <rect
+                                x={(foot.axis.x1 * scaleX - 2) + '%'}
+                                y={(foot.axis.y1 * scaleY - 8) + '%'}
+                                width="4%"
+                                height="4%"
+                                rx={1}
+                                fill="#22c55e"
+                              />
+                              <text
+                                x={foot.axis.x1 * scaleX + '%'}
+                                y={(foot.axis.y1 * scaleY - 2) + '%'}
+                                textAnchor="middle"
+                                fontSize={10}
+                                fill="#fff"
+                                fontWeight={700}
+                              >L</text>
+                              {/* Líneas horizontales y etiquetas (A, M, L3, L4, P) */}
+                              {foot.bands.map((b, i) => (
+                                <g key={b.label}>
                                   <line
-                                    x1={sec.left.x * scaleX + '%'}
-                                    y1={sec.left.y * scaleY + '%'}
-                                    x2={sec.right.x * scaleX + '%'}
-                                    y2={sec.right.y * scaleY + '%'}
-                                    stroke="#f59e42"
+                                    x1={b.left * scaleX + '%'}
+                                    y1={b.py * scaleY + '%'}
+                                    x2={b.right * scaleX + '%'}
+                                    y2={b.py * scaleY + '%'}
+                                    stroke={b.color}
                                     strokeWidth={2}
                                   />
-                                  {/* Etiqueta de sección */}
+                                  {/* Etiqueta izquierda */}
                                   <rect
-                                    x={(sec.px * scaleX - 2) + '%'}
-                                    y={(sec.py * scaleY - 4) + '%'}
-                                    width="4%"
+                                    x={(b.left * scaleX - 2.5) + '%'}
+                                    y={(b.py * scaleY - 4) + '%'}
+                                    width="5%"
                                     height="4%"
                                     rx={1}
-                                    fill="#f59e42"
+                                    fill={b.color}
                                   />
                                   <text
-                                    x={sec.px * scaleX + '%'}
-                                    y={(sec.py * scaleY - 1) + '%'}
+                                    x={b.left * scaleX + '%'}
+                                    y={(b.py * scaleY - 1) + '%'}
                                     textAnchor="middle"
-                                    fontSize={8}
+                                    fontSize={10}
                                     fill="#fff"
-                                    fontWeight={600}
-                                  >
-                                    {sec.name}
-                                  </text>
-                                  {/* Medida de ancho */}
+                                    fontWeight={700}
+                                  >{b.label}</text>
+                                  {/* Etiqueta derecha */}
                                   <rect
-                                    x={((sec.left.x + sec.right.x) / 2 * scaleX - 6) + '%'}
-                                    y={((sec.left.y + sec.right.y) / 2 * scaleY - 6) + '%'}
+                                    x={(b.right * scaleX - 2.5) + '%'}
+                                    y={(b.py * scaleY - 4) + '%'}
+                                    width="5%"
+                                    height="4%"
+                                    rx={1}
+                                    fill={b.color}
+                                  />
+                                  <text
+                                    x={b.right * scaleX + '%'}
+                                    y={(b.py * scaleY - 1) + '%'}
+                                    textAnchor="middle"
+                                    fontSize={10}
+                                    fill="#fff"
+                                    fontWeight={700}
+                                  >{b.label}</text>
+                                  {/* Medida de ancho en el centro */}
+                                  <rect
+                                    x={((b.left + b.right) / 2 * scaleX - 6) + '%'}
+                                    y={(b.py * scaleY - 6) + '%'}
                                     width="12%"
                                     height="5%"
                                     rx={1.5}
                                     fill="#fde68a"
                                   />
                                   <text
-                                    x={((sec.left.x + sec.right.x) / 2 * scaleX) + '%'}
-                                    y={((sec.left.y + sec.right.y) / 2 * scaleY - 2.7) + '%'}
+                                    x={((b.left + b.right) / 2 * scaleX) + '%'}
+                                    y={(b.py * scaleY - 2.7) + '%'}
                                     textAnchor="middle"
-                                    fontSize={7}
+                                    fontSize={9}
                                     fill="#0f172a"
-                                    fontWeight={600}
-                                  >
-                                    {sec.width.toFixed(1)} px
-                                  </text>
+                                    fontWeight={700}
+                                  >{b.widthCm.toFixed(2)} cm</text>
                                 </g>
                               ))}
-                              {/* Puntos clave */}
-                              <circle cx={foot.heel.x * scaleX + '%'} cy={foot.heel.y * scaleY + '%'} r={3} fill="#0ea5e9" />
-                              <circle cx={foot.toe2.x * scaleX + '%'} cy={foot.toe2.y * scaleY + '%'} r={3} fill="#0ea5e9" />
+                              {/* Etiquetas X, Y (en bandas M y L3) */}
+                              <rect
+                                x={((foot.bandM.left + foot.bandM.right) / 2 * scaleX - 2.5) + '%'}
+                                y={(foot.bandM.py * scaleY - 10) + '%'}
+                                width="7%"
+                                height="4%"
+                                rx={1}
+                                fill="#eab308"
+                              />
+                              <text
+                                x={((foot.bandM.left + foot.bandM.right) / 2 * scaleX) + '%'}
+                                y={(foot.bandM.py * scaleY - 7) + '%'}
+                                textAnchor="middle"
+                                fontSize={10}
+                                fill="#fff"
+                                fontWeight={700}
+                              >X</text>
+                              <rect
+                                x={((foot.bandL3.left + foot.bandL3.right) / 2 * scaleX - 2.5) + '%'}
+                                y={(foot.bandL3.py * scaleY - 10) + '%'}
+                                width="7%"
+                                height="4%"
+                                rx={1}
+                                fill="#f472b6"
+                              />
+                              <text
+                                x={((foot.bandL3.left + foot.bandL3.right) / 2 * scaleX) + '%'}
+                                y={(foot.bandL3.py * scaleY - 7) + '%'}
+                                textAnchor="middle"
+                                fontSize={10}
+                                fill="#fff"
+                                fontWeight={700}
+                              >Y</text>
                             </g>
                           );
                         })}
