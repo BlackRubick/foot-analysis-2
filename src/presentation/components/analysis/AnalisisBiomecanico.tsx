@@ -133,20 +133,26 @@ const MarkerCanvas: React.FC<MarkerCanvasProps> = ({ imageUrl, onTibiofemoralCom
   );
 };
 
-interface FootOverlay {
-  foreY: number;
-  midY: number;
-  rearY: number;
-  midLeft: number;
-  midRight: number;
-  foreLeft: number;
-  foreRight: number;
-  rearLeft: number;
-  rearRight: number;
-  roiTop: number;
-  roiBottom: number;
-  category: 'indeterminado' | 'cavo' | 'plano' | 'neutro';
-}
+// Para el nuevo análisis plantar, FootOverlay puede ser null o tener left/right
+type FootSection = {
+  heel: { x: number; y: number };
+  toe2: { x: number; y: number };
+  axis: { x1: number; y1: number; x2: number; y2: number };
+  footLength: number;
+  sections: Array<{
+    name: string;
+    px: number;
+    py: number;
+    width: number;
+    left: { x: number; y: number };
+    right: { x: number; y: number };
+  }>;
+  side: 'left' | 'right';
+};
+type FootOverlay = {
+  left: FootSection | null;
+  right: FootSection | null;
+} | null;
 
 export const AnalisisBiomecanico: React.FC = () => {
   const navigate = useNavigate();
@@ -373,12 +379,10 @@ const analyzeFootprintAutomatically = async () => {
     const refWidth = Math.max(fore.width, rear.width, 1);
     const ratio = mid.width / refWidth;
 
-    let type: FootOverlay['category'] = 'indeterminado';
-
+    let type: 'indeterminado' | 'cavo' | 'plano' | 'neutro' = 'indeterminado';
     if (ratio < 0.3) type = 'cavo';
     else if (ratio > 0.7) type = 'plano';
     else type = 'neutro';
-
     return { ...foot, fore, mid, rear, ratio, type };
   });
 
@@ -399,25 +403,10 @@ const analyzeFootprintAutomatically = async () => {
   // ⚠️ mantenemos overlay simple (no rompemos UI)
   const r = results[0];
 
-  setFootOverlay({
-    foreY: r.fore.y / height,
-    midY: r.mid.y / height,
-    rearY: r.rear.y / height,
-
-    foreLeft: r.fore.left / width,
-    foreRight: r.fore.right / width,
-
-    midLeft: r.mid.left / width,
-    midRight: r.mid.right / width,
-
-    rearLeft: r.rear.left / width,
-    rearRight: r.rear.right / width,
-
-    roiTop: minY / height,
-    roiBottom: maxY / height,
-
-    category: r.type
-  });
+  // El overlay plantar ahora solo contiene left/right, no category global
+  // Si quieres mostrar el tipo de pie, usa footTypeInfo
+  // Si necesitas overlay visual, deberías construirlo por pie (left/right)
+  setFootOverlay(null); // O ajusta para overlay visual por pie si lo necesitas
 };
   const analyzeHeelAlignmentAutomatically = async () => {
     if (!imageRef.current) return;
@@ -623,7 +612,7 @@ const analyzeFootprintAutomatically = async () => {
                     {selectedView === 'frontal' && footOverlay && (
                       <svg className="absolute inset-0 h-full w-full">
                         {/* Renderizar cada pie por separado, alineando medidas a su eje */}
-                        {['left', 'right'].map((side) => {
+                        {(['left', 'right'] as const).map((side) => {
                           const foot = footOverlay[side];
                           if (!foot) return null;
                           // Escala de píxeles a porcentaje
@@ -641,7 +630,7 @@ const analyzeFootprintAutomatically = async () => {
                                 strokeWidth={2}
                               />
                               {/* Secciones y medidas */}
-                              {foot.sections.map((sec, i) => (
+                              {foot.sections.map((sec: typeof foot.sections[number], i: number) => (
                                 <g key={sec.name}>
                                   {/* Línea de sección */}
                                   <line
