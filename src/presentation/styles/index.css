@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased dark:bg-clinical-background dark:text-slate-100;
+}
+
+.clinical-card {
+  @apply bg-white border border-slate-200 rounded-xl shadow-md shadow-slate-200/60 dark:bg-slate-900/80 dark:border-slate-800 dark:shadow-slate-900/40;
+}
+
+.clinical-input {
+  @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-clinical-primary focus:border-transparent dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100;
+}
+
+.clinical-button-primary {
+  @apply inline-flex items-center justify-center rounded-lg bg-clinical-primary px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-clinical-primarySoft transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.clinical-badge {
+  @apply inline-flex items-center rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-200;
+}
